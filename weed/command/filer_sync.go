@@ -61,6 +61,7 @@ var (
 )
 
 func init() {
+	fmt.Println("running custom sync command with logging")
 	cmdFilerSynchronize.Run = runFilerSynchronize // break init cycle
 	syncOptions.isActivePassive = cmdFilerSynchronize.Flag.Bool("isActivePassive", false, "one directional follow from A to B if true")
 	syncOptions.filerA = cmdFilerSynchronize.Flag.String("a", "", "filer A in one SeaweedFS cluster")
@@ -407,40 +408,55 @@ func genProcessFunction(sourcePath string, targetPath string, excludePaths []str
 
 		// handle updates
 		if strings.HasPrefix(string(sourceOldKey), sourcePath) {
+			fmt.Println(sourceOldKey, sourceNewKey,"old key is in watched directory", )
 			// old key is in the watched directory
 			if strings.HasPrefix(string(sourceNewKey), sourcePath) {
+				fmt.Println(sourceOldKey, sourceNewKey,"new key is also in watched directory", )
 				// new key is also in the watched directory
 				if !dataSink.IsIncremental() {
+					fmt.Println(sourceOldKey, sourceNewKey,"sink is not incremental", )
+					
 					oldKey := util.Join(targetPath, string(sourceOldKey)[len(sourcePath):])
 					message.NewParentPath = util.Join(targetPath, message.NewParentPath[len(sourcePath):])
 					foundExisting, err := dataSink.UpdateEntry(string(oldKey), message.OldEntry, message.NewParentPath, message.NewEntry, message.DeleteChunks, message.Signatures)
 					if foundExisting {
+						fmt.Println(sourceOldKey, sourceNewKey,"found existing", err, )
 						return err
 					}
 
 					// not able to find old entry
 					if err = dataSink.DeleteEntry(string(oldKey), message.OldEntry.IsDirectory, false, message.Signatures); err != nil {
+						fmt.Println(sourceOldKey, sourceNewKey,"not able to find old entry", err, )
 						return fmt.Errorf("delete old entry %v: %v", oldKey, err)
 					}
+					fmt.Println(sourceOldKey, sourceNewKey,"sink is not incremental - end", )
 				}
 				// create the new entry
 				newKey := buildKey(dataSink, message, targetPath, sourceNewKey, sourcePath)
+				fmt.Println("built key", newKey)
 				return dataSink.CreateEntry(newKey, message.NewEntry, message.Signatures)
 
 			} else {
+				fmt.Println("new key is outside watched directory", sourceNewKey)
 				// new key is outside of the watched directory
 				if !dataSink.IsIncremental() {
+					fmt.Println("sink is not incremental")
 					key := buildKey(dataSink, message, targetPath, sourceOldKey, sourcePath)
+					fmt.Println("built key", key)
 					return dataSink.DeleteEntry(key, message.OldEntry.IsDirectory, message.DeleteChunks, message.Signatures)
 				}
 			}
 		} else {
+			fmt.Println(sourceOldKey, sourceNewKey,"old key is outside watched directory", )
 			// old key is outside of the watched directory
 			if strings.HasPrefix(string(sourceNewKey), sourcePath) {
+				fmt.Println(sourceOldKey, sourceNewKey,"new key is in watched directory", )
 				// new key is in the watched directory
 				key := buildKey(dataSink, message, targetPath, sourceNewKey, sourcePath)
+				fmt.Println(sourceOldKey, sourceNewKey,"built key", key, )
 				return dataSink.CreateEntry(key, message.NewEntry, message.Signatures)
 			} else {
+				fmt.Println(sourceOldKey, sourceNewKey,"new key is also outside watched directory", )
 				// new key is also outside of the watched directory
 				// skip
 			}
